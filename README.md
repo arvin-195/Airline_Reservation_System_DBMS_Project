@@ -1,1 +1,710 @@
 # Airline_Reservation_System_DBMS_Project
+
+
+import sqlite3
+from datetime import datetime
+
+# =========================================================
+# AIRLINE RESERVATION SYSTEM
+# Python + SQLite
+# =========================================================
+
+DB_NAME = "airline_reservation.db"
+
+
+# ---------------------------------------------------------
+# DATABASE CONNECTION
+# ---------------------------------------------------------
+
+conn = sqlite3.connect(DB_NAME)
+cursor = conn.cursor()
+
+# Enable foreign key constraints
+cursor.execute("PRAGMA foreign_keys = ON")
+
+
+# ---------------------------------------------------------
+# CREATE TABLES
+# ---------------------------------------------------------
+
+def create_tables():
+
+    cursor.executescript("""
+    
+    DROP TABLE IF EXISTS Payment;
+    DROP TABLE IF EXISTS Booking;
+    DROP TABLE IF EXISTS Trip;
+    DROP TABLE IF EXISTS Flight;
+    DROP TABLE IF EXISTS Aircraft;
+    DROP TABLE IF EXISTS Passenger;
+    DROP TABLE IF EXISTS Airport;
+
+    -- Airport
+    CREATE TABLE Airport (
+        airport_code VARCHAR(10) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        city VARCHAR(50) NOT NULL,
+        country VARCHAR(50) NOT NULL
+    );
+
+    -- Passenger
+    CREATE TABLE Passenger (
+        passenger_id INTEGER PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        dob DATE,
+        passport_number VARCHAR(30) UNIQUE,
+        contact_info VARCHAR(100)
+    );
+
+    -- Aircraft
+    CREATE TABLE Aircraft (
+        aircraft_id INTEGER PRIMARY KEY,
+        model VARCHAR(50) NOT NULL,
+        total_seating_capacity INTEGER NOT NULL
+    );
+
+    -- Flight
+    -- source_airport_code and destination_airport_code
+    -- both reference the same Airport table.
+    CREATE TABLE Flight (
+        flight_id INTEGER PRIMARY KEY,
+        flight_number VARCHAR(20) UNIQUE NOT NULL,
+        source_airport_code VARCHAR(10) NOT NULL,
+        destination_airport_code VARCHAR(10) NOT NULL,
+        departure_time DATETIME NOT NULL,
+        arrival_time DATETIME NOT NULL,
+        aircraft_id INTEGER NOT NULL,
+
+        FOREIGN KEY (source_airport_code)
+            REFERENCES Airport(airport_code),
+
+        FOREIGN KEY (destination_airport_code)
+            REFERENCES Airport(airport_code),
+
+        FOREIGN KEY (aircraft_id)
+            REFERENCES Aircraft(aircraft_id),
+
+        CHECK (source_airport_code <> destination_airport_code)
+    );
+
+    -- Trip / Itinerary
+    -- One trip can contain multiple flight bookings.
+    CREATE TABLE Trip (
+        trip_id INTEGER PRIMARY KEY,
+        itinerary_name VARCHAR(100)
+    );
+
+    -- Booking
+    -- Associative entity between Passenger and Flight.
+    CREATE TABLE Booking (
+        booking_id INTEGER PRIMARY KEY,
+        booking_reference VARCHAR(20) UNIQUE NOT NULL,
+        passenger_id INTEGER NOT NULL,
+        flight_id INTEGER NOT NULL,
+        trip_id INTEGER,
+        seat_number VARCHAR(10) NOT NULL,
+        class VARCHAR(20) NOT NULL,
+        booking_date DATE NOT NULL,
+        fare DECIMAL(10,2) NOT NULL,
+
+        FOREIGN KEY (passenger_id)
+            REFERENCES Passenger(passenger_id),
+
+        FOREIGN KEY (flight_id)
+            REFERENCES Flight(flight_id),
+
+        FOREIGN KEY (trip_id)
+            REFERENCES Trip(trip_id),
+
+        -- Seat must be unique on each flight
+        UNIQUE (flight_id, seat_number)
+    );
+
+    -- Payment
+    CREATE TABLE Payment (
+        payment_id INTEGER PRIMARY KEY,
+        booking_id INTEGER UNIQUE NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        mode VARCHAR(20) NOT NULL,
+        status VARCHAR(20) NOT NULL,
+
+        FOREIGN KEY (booking_id)
+            REFERENCES Booking(booking_id)
+    );
+
+    """)
+
+    conn.commit()
+
+
+# ---------------------------------------------------------
+# INSERT SAMPLE DATA
+# ---------------------------------------------------------
+
+def insert_sample_data():
+
+    # ---------------- AIRPORTS ----------------
+
+    airports = [
+        ("IXE", "Mangalore International Airport", "Mangalore", "India"),
+        ("BLR", "Kempegowda International Airport", "Bangalore", "India"),
+        ("BOM", "Chhatrapati Shivaji Maharaj Airport", "Mumbai", "India"),
+        ("DEL", "Indira Gandhi International Airport", "Delhi", "India"),
+        ("MAA", "Chennai International Airport", "Chennai", "India"),
+        ("HYD", "Rajiv Gandhi International Airport", "Hyderabad", "India")
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Airport
+        VALUES (?, ?, ?, ?)
+    """, airports)
+
+
+    # ---------------- PASSENGERS ----------------
+
+    passengers = [
+        (1, "Arjun Kumar", "2002-01-10", "P10001", "9876543210"),
+        (2, "Rahul Sharma", "2001-03-15", "P10002", "9876543211"),
+        (3, "Priya Nair", "2003-05-20", "P10003", "9876543212"),
+        (4, "Ananya Rao", "2002-07-12", "P10004", "9876543213"),
+        (5, "Rohan Shetty", "2001-09-25", "P10005", "9876543214"),
+        (6, "Sneha Pai", "2003-11-18", "P10006", "9876543215"),
+        (7, "Vikram Singh", "2000-02-22", "P10007", "9876543216"),
+        (8, "Neha Joshi", "2002-04-14", "P10008", "9876543217"),
+        (9, "Karan Mehta", "2001-06-30", "P10009", "9876543218"),
+        (10, "Meera Das", "2003-08-05", "P10010", "9876543219"),
+        (11, "Aditya Rao", "2002-10-11", "P10011", "9876543220"),
+        (12, "Pooja Shah", "2001-12-01", "P10012", "9876543221"),
+        (13, "Nikhil Kumar", "2003-01-17", "P10013", "9876543222"),
+        (14, "Divya Menon", "2002-03-29", "P10014", "9876543223"),
+        (15, "Sanjay Bhat", "2000-05-09", "P10015", "9876543224")
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Passenger
+        VALUES (?, ?, ?, ?, ?)
+    """, passengers)
+
+
+    # ---------------- AIRCRAFT ----------------
+
+    aircraft = [
+        (1, "Airbus A320", 180),
+        (2, "Boeing 737", 160),
+        (3, "Airbus A321", 220),
+        (4, "Boeing 787", 250)
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Aircraft
+        VALUES (?, ?, ?)
+    """, aircraft)
+
+
+    # ---------------- FLIGHTS ----------------
+
+    flights = [
+        (1, "AI101", "IXE", "BLR",
+         "2026-10-01 08:00", "2026-10-01 09:15", 1),
+
+        (2, "AI102", "BLR", "DEL",
+         "2026-10-01 11:00", "2026-10-01 13:45", 2),
+
+        (3, "AI103", "DEL", "BOM",
+         "2026-10-01 15:00", "2026-10-01 17:15", 3),
+
+        (4, "AI104", "BOM", "IXE",
+         "2026-10-02 09:00", "2026-10-02 10:45", 1),
+
+        (5, "AI105", "IXE", "MAA",
+         "2026-10-02 12:00", "2026-10-02 13:30", 2),
+
+        (6, "AI106", "MAA", "DEL",
+         "2026-10-02 15:00", "2026-10-02 18:00", 3),
+
+        (7, "AI107", "BLR", "HYD",
+         "2026-10-03 08:30", "2026-10-03 10:00", 1),
+
+        (8, "AI108", "HYD", "BOM",
+         "2026-10-03 12:00", "2026-10-03 13:30", 2),
+
+        (9, "AI109", "BOM", "DEL",
+         "2026-10-04 14:00", "2026-10-04 16:00", 4),
+
+        (10, "AI110", "DEL", "BLR",
+         "2026-10-04 18:00", "2026-10-04 20:30", 3)
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Flight
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, flights)
+
+
+    # ---------------- TRIPS ----------------
+
+    trips = [
+        (1, "Mangalore to Delhi via Bangalore"),
+        (2, "Mangalore to Mumbai via Delhi"),
+        (3, "Bangalore to Mumbai via Hyderabad"),
+        (4, "Mumbai to Bangalore via Delhi")
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Trip
+        VALUES (?, ?)
+    """, trips)
+
+
+    # ---------------- BOOKINGS ----------------
+
+    bookings = [
+        # Direct / normal booking
+        (1, "BK001", 1, 1, None, "12A", "Economy",
+         "2026-09-20", 3500),
+
+        (2, "BK002", 2, 1, None, "12B", "Economy",
+         "2026-09-20", 3500),
+
+        # Connecting trip 1
+        (3, "BK003", 3, 1, 1, "14A", "Economy",
+         "2026-09-20", 3500),
+
+        (4, "BK004", 3, 2, 1, "15A", "Economy",
+         "2026-09-20", 6500),
+
+        # Connecting trip 2
+        (5, "BK005", 4, 1, 2, "16A", "Business",
+         "2026-09-20", 7000),
+
+        (6, "BK006", 4, 2, 2, "16B", "Business",
+         "2026-09-20", 9000),
+
+        # Other bookings
+        (7, "BK007", 5, 3, None, "20A", "Economy",
+         "2026-09-20", 8000),
+
+        (8, "BK008", 6, 4, None, "21A", "Economy",
+         "2026-09-20", 5000),
+
+        (9, "BK009", 7, 5, None, "22A", "Economy",
+         "2026-09-20", 4000),
+
+        (10, "BK010", 8, 6, None, "23A", "Business",
+         "2026-09-20", 10000),
+
+        # Connecting trip 3
+        (11, "BK011", 9, 7, 3, "24A", "Economy",
+         "2026-09-20", 4500),
+
+        (12, "BK012", 9, 8, 3, "24B", "Economy",
+         "2026-09-20", 5500),
+
+        (13, "BK013", 10, 9, None, "25A", "Economy",
+         "2026-09-20", 6000),
+
+        # Connecting trip 4
+        (14, "BK014", 11, 9, 4, "26A", "Business",
+         "2026-09-20", 9000),
+
+        (15, "BK015", 11, 10, 4, "26B", "Business",
+         "2026-09-20", 8500),
+
+        (16, "BK016", 12, 10, None, "27A", "Economy",
+         "2026-09-20", 5000),
+
+        (17, "BK017", 13, 3, None, "28A", "Economy",
+         "2026-09-20", 7500),
+
+        (18, "BK018", 14, 4, None, "29A", "Economy",
+         "2026-09-20", 5000),
+
+        (19, "BK019", 15, 5, None, "30A", "Economy",
+         "2026-09-20", 4000)
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Booking
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, bookings)
+
+
+    # ---------------- PAYMENTS ----------------
+
+    payments = [
+        (1, 1, 3500, "UPI", "Paid"),
+        (2, 2, 3500, "Card", "Paid"),
+        (3, 3, 3500, "UPI", "Paid"),
+        (4, 4, 6500, "UPI", "Paid"),
+        (5, 5, 7000, "Card", "Paid"),
+        (6, 6, 9000, "Card", "Paid"),
+        (7, 7, 8000, "UPI", "Paid"),
+        (8, 8, 5000, "Cash", "Paid"),
+        (9, 9, 4000, "UPI", "Paid"),
+        (10, 10, 10000, "Card", "Paid"),
+        (11, 11, 4500, "UPI", "Paid"),
+        (12, 12, 5500, "UPI", "Paid"),
+        (13, 13, 6000, "Card", "Paid"),
+        (14, 14, 9000, "Card", "Paid"),
+        (15, 15, 8500, "UPI", "Paid"),
+        (16, 16, 5000, "UPI", "Paid"),
+        (17, 17, 7500, "Card", "Paid"),
+        (18, 18, 5000, "Cash", "Paid"),
+        (19, 19, 4000, "UPI", "Paid")
+    ]
+
+    cursor.executemany("""
+        INSERT INTO Payment
+        VALUES (?, ?, ?, ?, ?)
+    """, payments)
+
+    conn.commit()
+
+
+# =========================================================
+# REQUIRED QUERIES
+# =========================================================
+
+
+# 1. ALL FLIGHTS FROM SOURCE TO DESTINATION
+def flights_between(source, destination):
+
+    print("\nFlights from", source, "to", destination)
+    print("-" * 70)
+
+    cursor.execute("""
+        SELECT
+            f.flight_number,
+            a1.name,
+            a2.name,
+            f.departure_time,
+            f.arrival_time
+        FROM Flight f
+        JOIN Airport a1
+            ON f.source_airport_code = a1.airport_code
+        JOIN Airport a2
+            ON f.destination_airport_code = a2.airport_code
+        WHERE f.source_airport_code = ?
+          AND f.destination_airport_code = ?
+    """, (source, destination))
+
+    rows = cursor.fetchall()
+
+    if not rows:
+        print("No flights found.")
+    else:
+        for row in rows:
+            print(row)
+
+
+# 2. PASSENGERS ON A SPECIFIC FLIGHT
+def passengers_on_flight(flight_number):
+
+    print("\nPassengers on", flight_number)
+    print("-" * 50)
+
+    cursor.execute("""
+        SELECT
+            p.passenger_id,
+            p.name,
+            b.seat_number,
+            b.class
+        FROM Passenger p
+        JOIN Booking b
+            ON p.passenger_id = b.passenger_id
+        JOIN Flight f
+            ON b.flight_id = f.flight_id
+        WHERE f.flight_number = ?
+    """, (flight_number,))
+
+    rows = cursor.fetchall()
+
+    if not rows:
+        print("No passengers found.")
+    else:
+        for row in rows:
+            print(row)
+
+
+# 3. AVAILABLE SEATS
+def available_seats(flight_number):
+
+    cursor.execute("""
+        SELECT
+            f.aircraft_id,
+            a.total_seating_capacity
+        FROM Flight f
+        JOIN Aircraft a
+            ON f.aircraft_id = a.aircraft_id
+        WHERE f.flight_number = ?
+    """, (flight_number,))
+
+    result = cursor.fetchone()
+
+    if result is None:
+        print("Flight not found.")
+        return
+
+    aircraft_id, capacity = result
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM Booking b
+        JOIN Flight f
+            ON b.flight_id = f.flight_id
+        WHERE f.flight_number = ?
+    """, (flight_number,))
+
+    booked = cursor.fetchone()[0]
+
+    available = capacity - booked
+
+    print("\nFlight:", flight_number)
+    print("Total seats:", capacity)
+    print("Booked seats:", booked)
+    print("Available seats:", available)
+
+
+# 4. TOTAL REVENUE PER FLIGHT
+def revenue_per_flight():
+
+    print("\nTotal Revenue Per Flight")
+    print("-" * 50)
+
+    cursor.execute("""
+        SELECT
+            f.flight_number,
+            COALESCE(SUM(b.fare), 0) AS total_revenue
+        FROM Flight f
+        LEFT JOIN Booking b
+            ON f.flight_id = b.flight_id
+        GROUP BY f.flight_id, f.flight_number
+        ORDER BY f.flight_number
+    """)
+
+    for row in cursor.fetchall():
+        print(row[0], "-> ₹", row[1])
+
+
+# 5. PASSENGERS WITH CONNECTING ITINERARIES
+def connecting_passengers():
+
+    print("\nPassengers With Connecting Itineraries")
+    print("-" * 60)
+
+    cursor.execute("""
+        SELECT
+            p.name,
+            t.trip_id,
+            t.itinerary_name,
+            COUNT(b.flight_id) AS number_of_legs
+        FROM Passenger p
+        JOIN Booking b
+            ON p.passenger_id = b.passenger_id
+        JOIN Trip t
+            ON b.trip_id = t.trip_id
+        GROUP BY
+            p.passenger_id,
+            p.name,
+            t.trip_id,
+            t.itinerary_name
+        HAVING COUNT(b.flight_id) > 1
+    """)
+
+    rows = cursor.fetchall()
+
+    for row in rows:
+        print(
+            "Passenger:", row[0],
+            "| Trip:", row[1],
+            "|", row[2],
+            "| Legs:", row[3]
+        )
+
+
+# =========================================================
+# ADD NEW BOOKING
+# =========================================================
+
+def add_booking():
+
+    try:
+        passenger_id = int(input("Enter passenger ID: "))
+        flight_id = int(input("Enter flight ID: "))
+        trip_id_input = input("Enter trip ID (press Enter if direct): ")
+
+        trip_id = None if trip_id_input == "" else int(trip_id_input)
+
+        seat = input("Enter seat number: ")
+        seat_class = input("Enter class (Economy/Business): ")
+        fare = float(input("Enter fare: "))
+
+        booking_reference = "BK" + str(
+            cursor.execute(
+                "SELECT COALESCE(MAX(booking_id),0)+1 FROM Booking"
+            ).fetchone()[0]
+        ).zfill(3)
+
+        booking_date = datetime.now().strftime("%Y-%m-%d")
+
+        cursor.execute("""
+            INSERT INTO Booking
+            (
+                booking_reference,
+                passenger_id,
+                flight_id,
+                trip_id,
+                seat_number,
+                class,
+                booking_date,
+                fare
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            booking_reference,
+            passenger_id,
+            flight_id,
+            trip_id,
+            seat,
+            seat_class,
+            booking_date,
+            fare
+        ))
+
+        conn.commit()
+
+        print("\nBooking successful!")
+        print("Booking Reference:", booking_reference)
+
+    except sqlite3.IntegrityError as e:
+        print("\nBooking failed:", e)
+
+    except ValueError:
+        print("\nInvalid input.")
+
+
+# =========================================================
+# DISPLAY TABLE DATA
+# =========================================================
+
+def display_table(table_name):
+
+    allowed_tables = [
+        "Airport",
+        "Passenger",
+        "Aircraft",
+        "Flight",
+        "Trip",
+        "Booking",
+        "Payment"
+    ]
+
+    if table_name not in allowed_tables:
+        print("Invalid table.")
+        return
+
+    cursor.execute("SELECT * FROM " + table_name)
+
+    rows = cursor.fetchall()
+
+    print("\n", table_name)
+    print("-" * 80)
+
+    for row in rows:
+        print(row)
+
+
+# =========================================================
+# MENU
+# =========================================================
+
+def menu():
+
+    while True:
+
+        print("\n")
+        print("=" * 60)
+        print("       AIRLINE RESERVATION SYSTEM")
+        print("=" * 60)
+
+        print("1. Find flights between two airports")
+        print("2. View passengers on a flight")
+        print("3. Check available seats")
+        print("4. View revenue per flight")
+        print("5. View passengers with connecting itineraries")
+        print("6. Add new booking")
+        print("7. Display table")
+        print("8. Exit")
+
+        choice = input("\nEnter your choice: ")
+
+        if choice == "1":
+
+            source = input("Enter source airport code: ").upper()
+            destination = input("Enter destination airport code: ").upper()
+
+            flights_between(source, destination)
+
+        elif choice == "2":
+
+            flight = input("Enter flight number: ").upper()
+
+            passengers_on_flight(flight)
+
+        elif choice == "3":
+
+            flight = input("Enter flight number: ").upper()
+
+            available_seats(flight)
+
+        elif choice == "4":
+
+            revenue_per_flight()
+
+        elif choice == "5":
+
+            connecting_passengers()
+
+        elif choice == "6":
+
+            add_booking()
+
+        elif choice == "7":
+
+            print("\nAvailable Tables:")
+            print("Airport")
+            print("Passenger")
+            print("Aircraft")
+            print("Flight")
+            print("Trip")
+            print("Booking")
+            print("Payment")
+
+            table = input("\nEnter table name: ")
+
+            display_table(table)
+
+        elif choice == "8":
+
+            print("\nThank you for using Airline Reservation System.")
+            break
+
+        else:
+            print("\nInvalid choice.")
+
+
+# =========================================================
+# MAIN PROGRAM
+# =========================================================
+
+if __name__ == "__main__":
+
+    create_tables()
+    insert_sample_data()
+
+    print("\nDatabase created successfully!")
+    print("Sample data inserted successfully.")
+
+    menu()
+
+    conn.close()
