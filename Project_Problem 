@@ -1,0 +1,45 @@
+Airline Reservation System
+
+Problem Statement
+
+An airline wants a database to manage flight schedules, passenger bookings, and seat allocation across multiple airports and aircraft, including support for connecting flights.
+
+System Requirements
+
+1. Passenger Passenger ID, name, DOB, passport number, contact info.
+
+2. Flight - Flight number, source airport, destination airport, departure time, arrival time, aircraft assigned.
+
+3. Airport - Airport code, name, city, country.
+
+4. Aircraft - Aircraft ID, model, total seating capacity.
+
+5. Booking - Links Passenger and Flight; booking reference number, seat number, class (Economy/Business), booking date, fare.
+
+6. Payment - Linked to Booking; amount, mode, status.
+
+Design Constraints
+
+Airport participates in the Flight relationship twice - as source and as destination. This is a recursive relationship on Airport (via Flight) and must be modeled with two distinct foreign keys (source_airport_id, destination_airport_id) referencing the same Airport
+
+A passenger can book multiple flights; a flight carries multiple passengers - Booking is the associative entity.
+
+Model multi-leg/connecting journeys: a single reservation (trip) may consist of multiple Flight+Booking combinations linked by a common trip/itinerary ID.
+
+Seat number must be unique per flight (composite uniqueness constraint on flight id +
+
+seat_number).
+
+Aircraft is assigned to a flight, and the same aircraft can be reused for different flights at different times (not simultaneously).
+
+Deliverables
+
+1. E-R diagram showing the recursive Airport relationship (source/destination) and the Booking associative entity.
+
+2. Relational schema (3NF) with PK/FK, including composite uniqueness constraints.
+
+3. SQL DDL/DML with sample data (5+ airports, 10+ flights, 15+ passengers, bookings including at least one connecting itinerary).
+
+4. Queries: all flights from a given source to destination; passengers on a specific flight; available seats on a flight; total revenue per flight; passengers with connecting itineraries.
+
+5. Documentation
